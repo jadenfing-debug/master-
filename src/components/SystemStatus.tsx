@@ -47,13 +47,13 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ metrics }) => {
           <div className="space-y-6">
             <ProgressBar
               value={metrics.cpuUsage}
-              label="CPU Usage"
+              label="CPU Usage (Real-time)"
               icon={<Cpu className="h-4 w-4 text-blue-400" />}
             />
             
             <ProgressBar
               value={metrics.memoryUsage}
-              label="Memory Usage"
+              label="Memory Usage (Browser)"
               icon={<HardDrive className="h-4 w-4 text-purple-400" />}
             />
 
@@ -77,8 +77,12 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ metrics }) => {
 
             <div className="pt-4 border-t border-gray-700">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">Active Connections</span>
+                <span className="text-sm text-gray-400">Network Connections</span>
                 <span className="text-lg font-semibold text-white">{metrics.activeConnections}</span>
+              </div>
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-sm text-gray-400">Monitoring Status</span>
+                <span className="text-sm font-semibold text-green-400">Real-time Active</span>
               </div>
             </div>
           </div>
@@ -86,7 +90,7 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ metrics }) => {
           <div className="text-center py-8">
             <Activity className="h-12 w-12 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400">No system metrics available</p>
-            <p className="text-sm text-gray-500 mt-2">Start monitoring to collect data</p>
+            <p className="text-sm text-gray-500 mt-2">Start real-time monitoring to collect live data</p>
           </div>
         )}
       </div>

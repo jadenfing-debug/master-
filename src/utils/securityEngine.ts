@@ -1,4 +1,5 @@
 import { NetworkPacket, ThreatAlert, SystemMetrics, MLModel } from '../types/security';
+import { realTimeMonitor } from './realTimeMonitor';
 
 export class SecurityEngine {
   private static instance: SecurityEngine;
@@ -6,12 +7,15 @@ export class SecurityEngine {
   private alerts: ThreatAlert[] = [];
   private metrics: SystemMetrics[] = [];
   private models: MLModel[] = [];
+  private logs: any[] = [];
   private isScanning = false;
   private listeners: ((data: any) => void)[] = [];
+  private errorHandler: ((error: Error) => void) | null = null;
 
   private constructor() {
     this.initializeMLModels();
-    this.generateRealTimeData();
+    this.setupErrorHandling();
+    this.integrateRealTimeMonitor();
   }
 
   static getInstance(): SecurityEngine {
@@ -19,6 +23,71 @@ export class SecurityEngine {
       SecurityEngine.instance = new SecurityEngine();
     }
     return SecurityEngine.instance;
+  }
+
+  private setupErrorHandling() {
+    this.errorHandler = (error: Error) => {
+      console.error('SecurityEngine Error:', error);
+      this.notifyListeners({
+        type: 'error',
+        data: {
+          message: error.message,
+          timestamp: Date.now(),
+          stack: error.stack
+        }
+      });
+    };
+
+    // Global error handling
+    window.addEventListener('error', (event) => {
+      this.errorHandler?.(new Error(event.message));
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      this.errorHandler?.(new Error(event.reason));
+    });
+  }
+
+  private integrateRealTimeMonitor() {
+    try {
+      realTimeMonitor.subscribe((data) => {
+        this.handleRealTimeData(data);
+      });
+    } catch (error) {
+      this.errorHandler?.(error as Error);
+    }
+  }
+
+  private handleRealTimeData(data: any) {
+    try {
+      switch (data.type) {
+        case 'packet':
+          this.packets.unshift(data.data);
+          this.packets = this.packets.slice(0, 1000);
+          this.notifyListeners({ type: 'packets', data: this.packets.slice(0, 50) });
+          break;
+        case 'threat':
+          this.alerts.unshift(data.data);
+          this.alerts = this.alerts.slice(0, 500);
+          this.notifyListeners({ type: 'threat', data: data.data });
+          break;
+        case 'metrics':
+          this.metrics.unshift(data.data);
+          this.metrics = this.metrics.slice(0, 100);
+          this.notifyListeners({ type: 'metrics', data: data.data });
+          break;
+        case 'log':
+          this.logs.unshift(data.data);
+          this.logs = this.logs.slice(0, 1000);
+          this.notifyListeners({ type: 'log', data: data.data });
+          break;
+        case 'error':
+          this.notifyListeners({ type: 'error', data: data.data });
+          break;
+      }
+    } catch (error) {
+      this.errorHandler?.(error as Error);
+    }
   }
 
   private initializeMLModels() {
@@ -124,45 +193,30 @@ export class SecurityEngine {
     };
   }
 
-  private generateRealTimeData() {
-    setInterval(() => {
-      if (this.isScanning) {
-        // Generate 2-5 packets per second
-        const packetCount = Math.floor(Math.random() * 4) + 2;
-        
-        for (let i = 0; i < packetCount; i++) {
-          const packet = this.generatePacket();
-          this.packets.unshift(packet);
-          
-          // Analyze for threats
-          const threat = this.analyzePacketForThreats(packet);
-          if (threat) {
-            this.alerts.unshift(threat);
-            this.notifyListeners({ type: 'threat', data: threat });
-          }
-        }
-
-        // Keep only last 1000 packets
-        this.packets = this.packets.slice(0, 1000);
-        this.alerts = this.alerts.slice(0, 500);
-
-        // Generate system metrics
-        const metrics = this.generateMetrics();
-        this.metrics.unshift(metrics);
-        this.metrics = this.metrics.slice(0, 100);
-
-        this.notifyListeners({ type: 'metrics', data: metrics });
-        this.notifyListeners({ type: 'packets', data: this.packets.slice(0, 50) });
-      }
-    }, 200);
-  }
-
   startScanning() {
-    this.isScanning = true;
+    try {
+      this.isScanning = true;
+      realTimeMonitor.startMonitoring();
+      this.notifyListeners({ 
+        type: 'status', 
+        data: { scanning: true, message: 'Real-time monitoring started' } 
+      });
+    } catch (error) {
+      this.errorHandler?.(error as Error);
+    }
   }
 
   stopScanning() {
-    this.isScanning = false;
+    try {
+      this.isScanning = false;
+      realTimeMonitor.stopMonitoring();
+      this.notifyListeners({ 
+        type: 'status', 
+        data: { scanning: false, message: 'Real-time monitoring stopped' } 
+      });
+    } catch (error) {
+      this.errorHandler?.(error as Error);
+    }
   }
 
   getRecentPackets(limit = 100): NetworkPacket[] {
@@ -189,6 +243,10 @@ export class SecurityEngine {
     return this.models;
   }
 
+  getLogs(): any[] {
+    return this.logs;
+  }
+
   resolveAlert(alertId: string) {
     const alert = this.alerts.find(a => a.id === alertId);
     if (alert) {
@@ -205,7 +263,38 @@ export class SecurityEngine {
   }
 
   private notifyListeners(data: any) {
-    this.listeners.forEach(listener => listener(data));
+    this.listeners.forEach(listener => {
+      try {
+        listener(data);
+      } catch (error) {
+        this.errorHandler?.(error as Error);
+      }
+    });
+  }
+
+  // Health check method
+  getSystemHealth() {
+    return {
+      isScanning: this.isScanning,
+      packetsCount: this.packets.length,
+      threatsCount: this.alerts.length,
+      metricsCount: this.metrics.length,
+      logsCount: this.logs.length,
+      modelsActive: this.models.filter(m => m.status === 'ACTIVE').length,
+      lastUpdate: Date.now()
+    };
+  }
+
+  // Performance optimization
+  cleanup() {
+    // Clean up old data to prevent memory leaks
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    const cutoff = Date.now() - maxAge;
+
+    this.packets = this.packets.filter(p => p.timestamp > cutoff);
+    this.alerts = this.alerts.filter(a => a.timestamp > cutoff);
+    this.metrics = this.metrics.filter(m => m.timestamp > cutoff);
+    this.logs = this.logs.filter(l => l.timestamp > cutoff);
   }
 }
 

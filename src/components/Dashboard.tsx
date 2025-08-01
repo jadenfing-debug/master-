@@ -7,6 +7,7 @@ import NetworkAnalyzer from './NetworkAnalyzer';
 import SystemStatus from './SystemStatus';
 import MLModelStatus from './MLModelStatus';
 import AlertCenter from './AlertCenter';
+import ReportCenter from './ReportCenter';
 
 const Dashboard: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
@@ -14,6 +15,9 @@ const Dashboard: React.FC = () => {
   const [activeThreats, setActiveThreats] = useState<ThreatAlert[]>([]);
   const [recentPackets, setRecentPackets] = useState<NetworkPacket[]>([]);
   const [threatCount, setThreatCount] = useState(0);
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'monitoring' | 'reports'>('monitoring');
+  const [systemHealth, setSystemHealth] = useState<any>(null);
 
   useEffect(() => {
     const handleSecurityUpdate = (data: any) => {
@@ -28,13 +32,34 @@ const Dashboard: React.FC = () => {
         case 'packets':
           setRecentPackets(data.data);
           break;
+        case 'log':
+          setSystemLogs(prev => [data.data, ...prev.slice(0, 999)]);
+          break;
+        case 'status':
+          console.log('System status:', data.data.message);
+          break;
+        case 'error':
+          console.error('System error:', data.data);
+          break;
       }
     };
 
     securityEngine.subscribe(handleSecurityUpdate);
 
+    // Health check interval
+    const healthInterval = setInterval(() => {
+      setSystemHealth(securityEngine.getSystemHealth());
+    }, 5000);
+
+    // Cleanup interval
+    const cleanupInterval = setInterval(() => {
+      securityEngine.cleanup();
+    }, 60000); // Every minute
+
     return () => {
       securityEngine.unsubscribe(handleSecurityUpdate);
+      clearInterval(healthInterval);
+      clearInterval(cleanupInterval);
     };
   }, []);
 
@@ -68,9 +93,15 @@ const Dashboard: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <div className={`h-3 w-3 rounded-full ${isScanning ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`}></div>
                 <span className="text-sm text-gray-300">
-                  {isScanning ? 'Active Monitoring' : 'Standby'}
+                  {isScanning ? 'Real-time Monitoring Active' : 'Standby Mode'}
                 </span>
               </div>
+              
+              {systemHealth && (
+                <div className="text-xs text-gray-400">
+                  {systemHealth.packetsCount} packets | {systemHealth.threatsCount} threats
+                </div>
+              )}
               
               <button
                 onClick={toggleScanning}
@@ -89,6 +120,34 @@ const Dashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Navigation Tabs */}
+        <div className="flex space-x-1 mb-8">
+          <button
+            onClick={() => setActiveTab('monitoring')}
+            className={clsx(
+              'px-6 py-3 rounded-lg font-medium transition-all duration-200',
+              activeTab === 'monitoring'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            )}
+          >
+            Real-time Monitoring
+          </button>
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={clsx(
+              'px-6 py-3 rounded-lg font-medium transition-all duration-200',
+              activeTab === 'reports'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            )}
+          >
+            Security Reports
+          </button>
+        </div>
+
+        {activeTab === 'monitoring' && (
+          <>
         {/* Key Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
@@ -165,6 +224,17 @@ const Dashboard: React.FC = () => {
             <AlertCenter threats={activeThreats.slice(0, 5)} />
           </div>
         </div>
+          </>
+        )}
+
+        {activeTab === 'reports' && (
+          <ReportCenter 
+            threats={activeThreats}
+            metrics={currentMetrics ? [currentMetrics] : []}
+            packets={recentPackets}
+            logs={systemLogs}
+          />
+        )}
       </main>
     </div>
   );

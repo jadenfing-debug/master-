@@ -51,3 +51,56 @@ export interface NetworkNode {
   lastSeen: number;
   threatLevel: number;
 }
+
+export interface SystemProcess {
+  pid: number;
+  name: string;
+  cpu: number;
+  memory: number;
+  user: string;
+  startTime: number;
+  suspicious: boolean;
+}
+
+export interface FileSystemEvent {
+  id: string;
+  timestamp: number;
+  type: 'CREATE' | 'MODIFY' | 'DELETE' | 'ACCESS';
+  path: string;
+  user: string;
+  size?: number;
+  suspicious: boolean;
+}
+
+export interface SecurityReport {
+  id: string;
+  timestamp: number;
+  type: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'INCIDENT';
+  title: string;
+  summary: string;
+  threatsDetected: number;
+  threatsBlocked: number;
+  networkEvents: number;
+  systemEvents: number;
+  riskScore: number;
+  recommendations: string[];
+  data: any;
+}
+
+export interface RealTimeConfig {
+  networkMonitoring: boolean;
+  hostMonitoring: boolean;
+  fileSystemWatching: boolean;
+  processMonitoring: boolean;
+  logAnalysis: boolean;
+  realTimeAlerts: boolean;
+}
+
+export interface SystemLog {
+  id: string;
+  timestamp: number;
+  level: 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL';
+  source: 'NETWORK' | 'HOST' | 'FILESYSTEM' | 'PROCESS' | 'SYSTEM';
+  message: string;
+  details?: any;
+}
