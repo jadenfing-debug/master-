@@ -49,10 +49,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cybershield/ids-ml.git"
+    "url": "https://github.com/cybershield-team/cybershield-ids.git"
   },
   "bugs": {
-    "url": "https://github.com/cybershield/ids-ml/issues"
+    "url": "https://github.com/cybershield-team/cybershield-ids/issues"
   },
-  "homepage": "https://cybershield-ids.com"
+  "homepage": "https://cybershield-team.github.io/cybershield-ids"
 }
