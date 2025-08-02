@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Activity, AlertTriangle, Network, Cpu, HardDrive, Wifi, Lock } from 'lucide-react';
+import { clsx } from 'clsx';
 import { securityEngine } from '../utils/securityEngine';
 import { ThreatAlert, SystemMetrics, NetworkPacket } from '../types/security';
 import ThreatMonitor from './ThreatMonitor';
@@ -21,26 +22,44 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     const handleSecurityUpdate = (data: any) => {
-      switch (data.type) {
-        case 'threat':
-          setActiveThreats(prev => [data.data, ...prev.slice(0, 49)]);
-          setThreatCount(prev => prev + 1);
-          break;
-        case 'metrics':
-          setCurrentMetrics(data.data);
-          break;
-        case 'packets':
-          setRecentPackets(data.data);
-          break;
-        case 'log':
-          setSystemLogs(prev => [data.data, ...prev.slice(0, 999)]);
-          break;
-        case 'status':
-          console.log('System status:', data.data.message);
-          break;
-        case 'error':
-          console.error('System error:', data.data);
-          break;
+      try {
+        if (!data || !data.type) return;
+        
+        switch (data.type) {
+          case 'threat':
+            if (data.data) {
+              setActiveThreats(prev => [data.data, ...prev.slice(0, 49)]);
+              setThreatCount(prev => prev + 1);
+            }
+            break;
+          case 'metrics':
+            if (data.data) {
+              setCurrentMetrics(data.data);
+            }
+            break;
+          case 'packets':
+            if (data.data) {
+              setRecentPackets(data.data);
+            }
+            break;
+          case 'log':
+            if (data.data) {
+              setSystemLogs(prev => [data.data, ...prev.slice(0, 999)]);
+            }
+            break;
+          case 'status':
+            if (data.data?.message) {
+              console.log('System status:', data.data.message);
+            }
+            break;
+          case 'error':
+            if (data.data) {
+              console.error('System error:', data.data);
+            }
+            break;
+        }
+      } catch (error) {
+        console.error('Error handling security update:', error);
       }
     };
 
@@ -64,12 +83,17 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const toggleScanning = () => {
-    if (isScanning) {
-      securityEngine.stopScanning();
-    } else {
-      securityEngine.startScanning();
+    try {
+      if (isScanning) {
+        securityEngine.stopScanning();
+      } else {
+        securityEngine.startScanning();
+      }
+      setIsScanning(!isScanning);
+    } catch (error) {
+      console.error('Error toggling scanning:', error);
+      alert('Failed to toggle monitoring. Please try again.');
     }
-    setIsScanning(!isScanning);
   };
 
   const criticalThreats = activeThreats.filter(t => t.severity === 'CRITICAL').length;

@@ -277,58 +277,78 @@ export class ReportGenerator {
   }
 
   private generateTimelineData(threats: ThreatAlert[], packets: NetworkPacket[]) {
-    const hours = Array.from({ length: 24 }, (_, i) => i);
+    try {
+      const hours = Array.from({ length: 24 }, (_, i) => i);
     
-    return hours.map(hour => {
-      const hourStart = startOfDay(new Date()).getTime() + (hour * 60 * 60 * 1000);
-      const hourEnd = hourStart + (60 * 60 * 1000);
+      return hours.map(hour => {
+        const hourStart = startOfDay(new Date()).getTime() + (hour * 60 * 60 * 1000);
+        const hourEnd = hourStart + (60 * 60 * 1000);
 
-      const hourThreats = threats.filter(t => t.timestamp >= hourStart && t.timestamp < hourEnd);
-      const hourPackets = packets.filter(p => p.timestamp >= hourStart && p.timestamp < hourEnd);
+        const hourThreats = threats.filter(t => t && t.timestamp >= hourStart && t.timestamp < hourEnd);
+        const hourPackets = packets.filter(p => p && p.timestamp >= hourStart && p.timestamp < hourEnd);
 
-      return {
-        hour,
-        threats: hourThreats.length,
-        packets: hourPackets.length,
-        criticalThreats: hourThreats.filter(t => t.severity === 'CRITICAL').length
-      };
-    });
+        return {
+          hour,
+          threats: hourThreats.length,
+          packets: hourPackets.length,
+          criticalThreats: hourThreats.filter(t => t && t.severity === 'CRITICAL').length
+        };
+      });
+    } catch (error) {
+      console.warn('Error generating timeline data:', error);
+      return [];
+    }
   }
 
   private generateDailyBreakdown(threats: ThreatAlert[], days: number) {
-    return Array.from({ length: days }, (_, i) => {
-      const date = subDays(new Date(), days - 1 - i);
-      const dayStart = startOfDay(date).getTime();
-      const dayEnd = endOfDay(date).getTime();
+    try {
+      return Array.from({ length: days }, (_, i) => {
+        const date = subDays(new Date(), days - 1 - i);
+        const dayStart = startOfDay(date).getTime();
+        const dayEnd = endOfDay(date).getTime();
 
-      const dayThreats = threats.filter(t => t.timestamp >= dayStart && t.timestamp <= dayEnd);
+        const dayThreats = threats.filter(t => t && t.timestamp >= dayStart && t.timestamp <= dayEnd);
 
-      return {
-        date: format(date, 'MMM dd'),
-        threats: dayThreats.length,
-        blocked: dayThreats.filter(t => t.blocked).length,
-        critical: dayThreats.filter(t => t.severity === 'CRITICAL').length
-      };
-    });
+        return {
+          date: format(date, 'MMM dd'),
+          threats: dayThreats.length,
+          blocked: dayThreats.filter(t => t && t.blocked).length,
+          critical: dayThreats.filter(t => t && t.severity === 'CRITICAL').length
+        };
+      });
+    } catch (error) {
+      console.warn('Error generating daily breakdown:', error);
+      return [];
+    }
   }
 
   private generateTrendAnalysis(threats: ThreatAlert[], packets: NetworkPacket[]) {
-    const recentThreats = threats.filter(t => t.timestamp > Date.now() - 3 * 24 * 60 * 60 * 1000);
-    const olderThreats = threats.filter(t => 
-      t.timestamp <= Date.now() - 3 * 24 * 60 * 60 * 1000 && 
-      t.timestamp > Date.now() - 6 * 24 * 60 * 60 * 1000
-    );
+    try {
+      const recentThreats = threats.filter(t => t && t.timestamp > Date.now() - 3 * 24 * 60 * 60 * 1000);
+      const olderThreats = threats.filter(t => 
+        t && t.timestamp <= Date.now() - 3 * 24 * 60 * 60 * 1000 && 
+        t.timestamp > Date.now() - 6 * 24 * 60 * 60 * 1000
+      );
 
-    const threatTrend = recentThreats.length > olderThreats.length ? 'increasing' : 
-                      recentThreats.length < olderThreats.length ? 'decreasing' : 'stable';
+      const threatTrend = recentThreats.length > olderThreats.length ? 'increasing' : 
+                        recentThreats.length < olderThreats.length ? 'decreasing' : 'stable';
 
-    return {
-      threatTrend,
-      recentCount: recentThreats.length,
-      previousCount: olderThreats.length,
-      changePercent: olderThreats.length > 0 ? 
-        Math.round(((recentThreats.length - olderThreats.length) / olderThreats.length) * 100) : 0
-    };
+      return {
+        threatTrend,
+        recentCount: recentThreats.length,
+        previousCount: olderThreats.length,
+        changePercent: olderThreats.length > 0 ? 
+          Math.round(((recentThreats.length - olderThreats.length) / olderThreats.length) * 100) : 0
+      };
+    } catch (error) {
+      console.warn('Error generating trend analysis:', error);
+      return {
+        threatTrend: 'stable',
+        recentCount: 0,
+        previousCount: 0,
+        changePercent: 0
+      };
+    }
   }
 
   private getTopThreats(threats: ThreatAlert[]) {
@@ -506,30 +526,44 @@ export class ReportGenerator {
   }
 
   exportReport(report: SecurityReport, format: 'JSON' | 'CSV' | 'PDF' = 'JSON'): string {
-    switch (format) {
-      case 'JSON':
-        return JSON.stringify(report, null, 2);
-      case 'CSV':
-        return this.convertToCSV(report);
-      case 'PDF':
-        return this.generatePDFContent(report);
-      default:
-        return JSON.stringify(report, null, 2);
+    try {
+      if (!report) {
+        throw new Error('Report is required');
+      }
+      
+      switch (format) {
+        case 'JSON':
+          return JSON.stringify(report, null, 2);
+        case 'CSV':
+          return this.convertToCSV(report);
+        case 'PDF':
+          return this.generatePDFContent(report);
+        default:
+          return JSON.stringify(report, null, 2);
+      }
+    } catch (error) {
+      console.error('Error exporting report:', error);
+      return JSON.stringify({ error: 'Failed to export report' }, null, 2);
     }
   }
 
   private convertToCSV(report: SecurityReport): string {
-    const headers = ['Timestamp', 'Type', 'Severity', 'Source IP', 'Description', 'Blocked'];
-    const rows = report.data.threats?.map((threat: ThreatAlert) => [
-      format(new Date(threat.timestamp), 'yyyy-MM-dd HH:mm:ss'),
-      threat.type,
-      threat.severity,
-      threat.sourceIP,
-      threat.description,
-      threat.blocked ? 'Yes' : 'No'
-    ]) || [];
+    try {
+      const headers = ['Timestamp', 'Type', 'Severity', 'Source IP', 'Description', 'Blocked'];
+      const rows = report.data?.threats?.map((threat: ThreatAlert) => [
+        threat?.timestamp ? format(new Date(threat.timestamp), 'yyyy-MM-dd HH:mm:ss') : 'Unknown',
+        threat?.type || 'Unknown',
+        threat?.severity || 'Unknown',
+        threat?.sourceIP || 'Unknown',
+        threat?.description || 'No description',
+        threat?.blocked ? 'Yes' : 'No'
+      ]) || [];
 
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
+      return [headers, ...rows].map(row => row.join(',')).join('\n');
+    } catch (error) {
+      console.error('Error converting to CSV:', error);
+      return 'Error generating CSV report';
+    }
   }
 
   private generatePDFContent(report: SecurityReport): string {

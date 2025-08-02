@@ -41,13 +41,18 @@ export class RealTimeMonitor {
       if (typeof navigator !== 'undefined' && 'connection' in navigator) {
         const connection = (navigator as any).connection;
         
-        // Monitor network changes
-        connection.addEventListener('change', () => {
-          this.handleNetworkChange(connection);
-        });
+        if (connection && typeof connection.addEventListener === 'function') {
+          // Monitor network changes
+          connection.addEventListener('change', () => {
+            this.handleNetworkChange(connection);
+          });
+        }
 
         // Start packet capture simulation with real network stats
         this.startNetworkCapture();
+      } else {
+        // Fallback to simulated monitoring
+        this.startSimulatedNetworkMonitoring();
       }
     } catch (error) {
       console.warn('Network monitoring limited in browser environment:', error);
@@ -99,34 +104,57 @@ export class RealTimeMonitor {
   private startNetworkCapture() {
     if (!this.isMonitoring) return;
 
-    // Real network monitoring using Resource Timing API
-    const observer = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        if (entry.entryType === 'resource') {
-          this.processNetworkEntry(entry as PerformanceResourceTiming);
-        }
-      }
-    });
+    try {
+      // Real network monitoring using Resource Timing API
+      if ('PerformanceObserver' in window) {
+        const observer = new PerformanceObserver((list) => {
+          try {
+            for (const entry of list.getEntries()) {
+              if (entry.entryType === 'resource') {
+                this.processNetworkEntry(entry as PerformanceResourceTiming);
+              }
+            }
+          } catch (error) {
+            console.warn('Error processing performance entries:', error);
+          }
+        });
 
-    observer.observe({ entryTypes: ['resource'] });
+        observer.observe({ entryTypes: ['resource'] });
+      } else {
+        // Fallback if PerformanceObserver is not available
+        this.startSimulatedNetworkMonitoring();
+      }
+    } catch (error) {
+      console.warn('Failed to start network capture:', error);
+      this.startSimulatedNetworkMonitoring();
+    }
   }
 
   private processNetworkEntry(entry: PerformanceResourceTiming) {
-    const packet: NetworkPacket = {
-      id: Math.random().toString(36).substr(2, 9),
-      timestamp: Date.now(),
-      sourceIP: this.extractIPFromURL(entry.name) || 'localhost',
-      destIP: window.location.hostname,
-      sourcePort: this.extractPortFromURL(entry.name) || 80,
-      destPort: window.location.port ? parseInt(window.location.port) : 80,
-      protocol: entry.name.startsWith('https') ? 'HTTPS' : 'HTTP',
-      size: entry.transferSize || 0,
-      flags: this.analyzeResourceTiming(entry)
-    };
+    try {
+      const packet: NetworkPacket = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        sourceIP: this.extractIPFromURL(entry.name) || 'localhost',
+        destIP: window.location.hostname || 'localhost',
+        sourcePort: this.extractPortFromURL(entry.name) || 80,
+        destPort: window.location.port ? parseInt(window.location.port) : 80,
+        protocol: entry.name.startsWith('https') ? 'HTTPS' : 'HTTP',
+        size: entry.transferSize || 0,
+        flags: this.analyzeResourceTiming(entry)
+      };
 
-    this.notifyListeners({ type: 'packet', data: packet });
-    this.analyzePacketForThreats(packet);
+      this.notifyListeners({ type: 'packet', data: packet });
+      this.analyzePacketForThreats(packet);
+    } catch (error) {
+      console.warn('Error processing network entry:', error);
+    }
   }
+        }
+      }
+
+
+
 
   private extractIPFromURL(url: string): string | null {
     try {
@@ -225,36 +253,50 @@ export class RealTimeMonitor {
   }
 
   private startSystemResourceMonitoring() {
-    setInterval(() => {
-      if (!this.isMonitoring) return;
+    const monitoringInterval = setInterval(() => {
+      try {
+        if (!this.isMonitoring) {
+          clearInterval(monitoringInterval);
+          return;
+        }
 
-      const memory = (performance as any).memory;
-      const metrics: SystemMetrics = {
-        cpuUsage: this.estimateCPUUsage(),
-        memoryUsage: memory ? Math.round((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100) : 0,
-        networkIn: this.getNetworkStats().bytesReceived,
-        networkOut: this.getNetworkStats().bytesSent,
-        activeConnections: this.getActiveConnections(),
-        threatsBlocked: 0,
-        timestamp: Date.now()
-      };
+        const memory = (performance as any).memory;
+        const networkStats = this.getNetworkStats();
+        
+        const metrics: SystemMetrics = {
+          cpuUsage: this.estimateCPUUsage(),
+          memoryUsage: memory ? Math.round((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100) : 0,
+          networkIn: networkStats.bytesReceived,
+          networkOut: networkStats.bytesSent,
+          activeConnections: this.getActiveConnections(),
+          threatsBlocked: 0,
+          timestamp: Date.now()
+        };
 
-      this.notifyListeners({ type: 'metrics', data: metrics });
+        this.notifyListeners({ type: 'metrics', data: metrics });
+      } catch (error) {
+        console.warn('Error in system resource monitoring:', error);
+      }
     }, 1000);
   }
 
   private estimateCPUUsage(): number {
-    // Estimate CPU usage based on performance timing
-    const start = performance.now();
-    let iterations = 0;
-    const maxTime = 10; // 10ms test
+    try {
+      // Estimate CPU usage based on performance timing
+      const start = performance.now();
+      let iterations = 0;
+      const maxTime = 10; // 10ms test
 
-    while (performance.now() - start < maxTime) {
-      iterations++;
+      while (performance.now() - start < maxTime) {
+        iterations++;
+      }
+
+      // Normalize to percentage (higher iterations = lower CPU usage)
+      return Math.max(0, Math.min(100, 100 - (iterations / 10000)));
+    } catch (error) {
+      console.warn('Error estimating CPU usage:', error);
+      return 0;
     }
-
-    // Normalize to percentage (higher iterations = lower CPU usage)
-    return Math.max(0, Math.min(100, 100 - (iterations / 10000)));
   }
 
   private getNetworkStats() {
@@ -266,91 +308,121 @@ export class RealTimeMonitor {
   }
 
   private getActiveConnections(): number {
-    // Estimate based on resource timing entries
-    const entries = performance.getEntriesByType('resource');
-    return entries.filter(entry => 
-      entry.startTime > Date.now() - 60000 // Last minute
-    ).length;
+    try {
+      // Estimate based on resource timing entries
+      const entries = performance.getEntriesByType('resource');
+      return entries.filter(entry => 
+        entry.startTime > Date.now() - 60000 // Last minute
+      ).length;
+    } catch (error) {
+      console.warn('Error getting active connections:', error);
+      return 0;
+    }
   }
 
   private setupUserActivityMonitoring() {
-    const events = ['click', 'keydown', 'mousemove', 'scroll'];
+    try {
+      const events = ['click', 'keydown', 'mousemove', 'scroll'];
     
-    events.forEach(eventType => {
-      document.addEventListener(eventType, (event) => {
-        this.analyzeUserActivity(eventType, event);
+      events.forEach(eventType => {
+        document.addEventListener(eventType, (event) => {
+          try {
+            this.analyzeUserActivity(eventType, event);
+          } catch (error) {
+            console.warn(`Error analyzing ${eventType} activity:`, error);
+          }
+        });
       });
-    });
+    } catch (error) {
+      console.warn('Error setting up user activity monitoring:', error);
+    }
   }
 
   private analyzeUserActivity(eventType: string, event: Event) {
-    // Detect suspicious user behavior patterns
-    const suspiciousPatterns = [
-      { pattern: 'rapid_clicks', threshold: 10 }, // 10 clicks per second
-      { pattern: 'unusual_key_sequence', threshold: 50 } // 50 keys per second
-    ];
+    try {
+      // Detect suspicious user behavior patterns
+      const suspiciousPatterns = [
+        { pattern: 'rapid_clicks', threshold: 10 }, // 10 clicks per second
+        { pattern: 'unusual_key_sequence', threshold: 50 } // 50 keys per second
+      ];
 
-    // Log user activity for analysis
-    this.logActivity({
-      type: eventType,
-      timestamp: Date.now(),
-      target: (event.target as Element)?.tagName || 'unknown'
-    });
+      // Log user activity for analysis
+      this.logActivity({
+        type: eventType,
+        timestamp: Date.now(),
+        target: (event.target as Element)?.tagName || 'unknown'
+      });
+    } catch (error) {
+      console.warn('Error analyzing user activity:', error);
+    }
   }
 
   private setupBrowserSecurityMonitoring() {
-    // Monitor for security-related browser events
-    window.addEventListener('securitypolicyviolation', (event) => {
-      const threat: ThreatAlert = {
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: Date.now(),
-        severity: 'HIGH',
-        type: 'INTRUSION',
-        sourceIP: 'localhost',
-        description: `CSP violation: ${event.violatedDirective}`,
-        confidence: 95,
-        blocked: true,
-        resolved: false
-      };
-
-      this.notifyListeners({ type: 'threat', data: threat });
-    });
-
-    // Monitor for XSS attempts
-    this.setupXSSDetection();
-  }
-
-  private setupXSSDetection() {
-    const originalInnerHTML = Element.prototype.innerHTML;
-    
-    Object.defineProperty(Element.prototype, 'innerHTML', {
-      set: function(value) {
-        if (typeof value === 'string' && this.detectXSS(value)) {
+    try {
+      // Monitor for security-related browser events
+      window.addEventListener('securitypolicyviolation', (event) => {
+        try {
           const threat: ThreatAlert = {
             id: Math.random().toString(36).substr(2, 9),
             timestamp: Date.now(),
-            severity: 'CRITICAL',
-            type: 'MALWARE',
+            severity: 'HIGH',
+            type: 'INTRUSION',
             sourceIP: 'localhost',
-            description: 'Potential XSS attempt detected in DOM manipulation',
-            confidence: 90,
+            description: `CSP violation: ${event.violatedDirective || 'unknown'}`,
+            confidence: 95,
             blocked: true,
             resolved: false
           };
 
-          RealTimeMonitor.getInstance().notifyListeners({ type: 'threat', data: threat });
-          return; // Block the XSS attempt
+          this.notifyListeners({ type: 'threat', data: threat });
+        } catch (error) {
+          console.warn('Error handling security policy violation:', error);
         }
-        
-        originalInnerHTML.call(this, value);
-      },
-      get: function() {
-        return originalInnerHTML.call(this);
-      }
-    });
+      });
+
+      // Monitor for XSS attempts
+      this.setupXSSDetection();
+    } catch (error) {
+      console.warn('Error setting up browser security monitoring:', error);
+    }
   }
 
-  private detectXSS(content: string): boolean {
+  private setupXSSDetection() {
+    const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')?.set;
+    
+    if (originalInnerHTML) {
+      Object.defineProperty(Element.prototype, 'innerHTML', {
+        set: function(value) {
+          if (typeof value === 'string' && RealTimeMonitor.getInstance().detectXSS(value)) {
+            const threat: ThreatAlert = {
+              id: Math.random().toString(36).substr(2, 9),
+              timestamp: Date.now(),
+              severity: 'CRITICAL',
+              type: 'MALWARE',
+              sourceIP: 'localhost',
+              description: 'Potential XSS attempt detected in DOM manipulation',
+              confidence: 90,
+              blocked: true,
+              resolved: false
+            };
+
+            RealTimeMonitor.getInstance().notifyListeners({ type: 'threat', data: threat });
+            return; // Block the XSS attempt
+          }
+          
+          originalInnerHTML.call(this, value);
+        },
+        get: function() {
+          const originalGetter = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')?.get;
+          return originalGetter ? originalGetter.call(this) : '';
+        }
+      });
+    }
+  }
+
+
+  // Make detectXSS public so it can be accessed from the prototype override
+  public detectXSS = (content: string): boolean => {
     const xssPatterns = [
       /<script[^>]*>.*?<\/script>/gi,
       /javascript:/gi,
@@ -362,161 +434,240 @@ export class RealTimeMonitor {
   }
 
   private setupStorageMonitoring() {
-    const originalSetItem = Storage.prototype.setItem;
+    try {
+      const originalSetItem = Storage.prototype.setItem;
     
-    Storage.prototype.setItem = function(key, value) {
-      RealTimeMonitor.getInstance().analyzeStorageAccess('SET', key, value);
-      return originalSetItem.call(this, key, value);
-    };
+      Storage.prototype.setItem = function(key, value) {
+        try {
+          RealTimeMonitor.getInstance().analyzeStorageAccess('SET', key, value);
+          return originalSetItem.call(this, key, value);
+        } catch (error) {
+          console.warn('Error in storage setItem override:', error);
+          return originalSetItem.call(this, key, value);
+        }
+      };
 
-    const originalGetItem = Storage.prototype.getItem;
+      const originalGetItem = Storage.prototype.getItem;
     
-    Storage.prototype.getItem = function(key) {
-      RealTimeMonitor.getInstance().analyzeStorageAccess('GET', key);
-      return originalGetItem.call(this, key);
-    };
+      Storage.prototype.getItem = function(key) {
+        try {
+          RealTimeMonitor.getInstance().analyzeStorageAccess('GET', key);
+          return originalGetItem.call(this, key);
+        } catch (error) {
+          console.warn('Error in storage getItem override:', error);
+          return originalGetItem.call(this, key);
+        }
+      };
+    } catch (error) {
+      console.warn('Error setting up storage monitoring:', error);
+    }
   }
 
   private analyzeStorageAccess(operation: string, key: string, value?: string) {
-    // Detect suspicious storage patterns
-    if (key.includes('password') || key.includes('token') || key.includes('secret')) {
-      const threat: ThreatAlert = {
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: Date.now(),
-        severity: 'MEDIUM',
-        type: 'DATA_EXFILTRATION',
-        sourceIP: 'localhost',
-        description: `Suspicious storage access: ${operation} operation on sensitive key "${key}"`,
-        confidence: 75,
-        blocked: false,
-        resolved: false
-      };
+    try {
+      // Detect suspicious storage patterns
+      if (key && (key.includes('password') || key.includes('token') || key.includes('secret'))) {
+        const threat: ThreatAlert = {
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          severity: 'MEDIUM',
+          type: 'DATA_EXFILTRATION',
+          sourceIP: 'localhost',
+          description: `Suspicious storage access: ${operation} operation on sensitive key "${key}"`,
+          confidence: 75,
+          blocked: false,
+          resolved: false
+        };
 
-      this.notifyListeners({ type: 'threat', data: threat });
+        this.notifyListeners({ type: 'threat', data: threat });
+      }
+    } catch (error) {
+      console.warn('Error analyzing storage access:', error);
     }
   }
 
   private setupFileAPIMonitoring() {
-    if ('FileReader' in window) {
-      const originalReadAsText = FileReader.prototype.readAsText;
+    try {
+      if ('FileReader' in window) {
+        const originalReadAsText = FileReader.prototype.readAsText;
       
-      FileReader.prototype.readAsText = function(file) {
-        RealTimeMonitor.getInstance().analyzeFileAccess(file);
-        return originalReadAsText.call(this, file);
-      };
+        FileReader.prototype.readAsText = function(file) {
+          try {
+            RealTimeMonitor.getInstance().analyzeFileAccess(file);
+            return originalReadAsText.call(this, file);
+          } catch (error) {
+            console.warn('Error in FileReader override:', error);
+            return originalReadAsText.call(this, file);
+          }
+        };
+      }
+    } catch (error) {
+      console.warn('Error setting up file API monitoring:', error);
     }
   }
 
   private analyzeFileAccess(file: File) {
-    const suspiciousExtensions = ['.exe', '.bat', '.cmd', '.scr', '.pif'];
-    const suspiciousTypes = ['application/x-msdownload', 'application/x-executable'];
-
-    if (suspiciousExtensions.some(ext => file.name.toLowerCase().endsWith(ext)) ||
-        suspiciousTypes.includes(file.type)) {
+    try {
+      if (!file || !file.name) return;
       
-      const threat: ThreatAlert = {
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: Date.now(),
-        severity: 'HIGH',
-        type: 'MALWARE',
-        sourceIP: 'localhost',
-        description: `Suspicious file access: ${file.name} (${file.type})`,
-        confidence: 85,
-        blocked: true,
-        resolved: false
-      };
+      const suspiciousExtensions = ['.exe', '.bat', '.cmd', '.scr', '.pif'];
+      const suspiciousTypes = ['application/x-msdownload', 'application/x-executable'];
 
-      this.notifyListeners({ type: 'threat', data: threat });
+      if (suspiciousExtensions.some(ext => file.name.toLowerCase().endsWith(ext)) ||
+          suspiciousTypes.includes(file.type)) {
+      
+        const threat: ThreatAlert = {
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          severity: 'HIGH',
+          type: 'MALWARE',
+          sourceIP: 'localhost',
+          description: `Suspicious file access: ${file.name} (${file.type || 'unknown'})`,
+          confidence: 85,
+          blocked: true,
+          resolved: false
+        };
+
+        this.notifyListeners({ type: 'threat', data: threat });
+      }
+    } catch (error) {
+      console.warn('Error analyzing file access:', error);
     }
   }
 
   private setupWorkerMonitoring() {
-    // Monitor Web Workers
-    const originalWorker = window.Worker;
+    try {
+      // Monitor Web Workers
+      if ('Worker' in window) {
+        const originalWorker = window.Worker;
     
-    window.Worker = class extends originalWorker {
-      constructor(scriptURL: string | URL, options?: WorkerOptions) {
-        super(scriptURL, options);
-        RealTimeMonitor.getInstance().analyzeWorkerCreation(scriptURL.toString());
+        window.Worker = class extends originalWorker {
+          constructor(scriptURL: string | URL, options?: WorkerOptions) {
+            super(scriptURL, options);
+            try {
+              RealTimeMonitor.getInstance().analyzeWorkerCreation(scriptURL.toString());
+            } catch (error) {
+              console.warn('Error analyzing worker creation:', error);
+            }
+          }
+        };
       }
-    };
+    } catch (error) {
+      console.warn('Error setting up worker monitoring:', error);
+    }
   }
 
   private analyzeWorkerCreation(scriptURL: string) {
-    // Analyze worker script for suspicious patterns
-    if (scriptURL.includes('crypto') || scriptURL.includes('mining')) {
-      const threat: ThreatAlert = {
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: Date.now(),
-        severity: 'HIGH',
-        type: 'MALWARE',
-        sourceIP: 'localhost',
-        description: `Suspicious worker script detected: ${scriptURL}`,
-        confidence: 80,
-        blocked: false,
-        resolved: false
-      };
+    try {
+      if (!scriptURL) return;
+      
+      // Analyze worker script for suspicious patterns
+      if (scriptURL.includes('crypto') || scriptURL.includes('mining')) {
+        const threat: ThreatAlert = {
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          severity: 'HIGH',
+          type: 'MALWARE',
+          sourceIP: 'localhost',
+          description: `Suspicious worker script detected: ${scriptURL}`,
+          confidence: 80,
+          blocked: false,
+          resolved: false
+        };
 
-      this.notifyListeners({ type: 'threat', data: threat });
+        this.notifyListeners({ type: 'threat', data: threat });
+      }
+    } catch (error) {
+      console.warn('Error analyzing worker creation:', error);
     }
   }
 
   private setupScriptMonitoring() {
-    // Monitor dynamic script creation
-    const originalCreateElement = document.createElement;
+    try {
+      // Monitor dynamic script creation
+      const originalCreateElement = document.createElement;
     
-    document.createElement = function(tagName: string) {
-      const element = originalCreateElement.call(this, tagName);
+      document.createElement = function(tagName: string) {
+        const element = originalCreateElement.call(this, tagName);
       
-      if (tagName.toLowerCase() === 'script') {
-        RealTimeMonitor.getInstance().monitorScriptElement(element as HTMLScriptElement);
-      }
+        if (tagName && tagName.toLowerCase() === 'script') {
+          try {
+            RealTimeMonitor.getInstance().monitorScriptElement(element as HTMLScriptElement);
+          } catch (error) {
+            console.warn('Error monitoring script element:', error);
+          }
+        }
       
-      return element;
-    };
+        return element;
+      };
+    } catch (error) {
+      console.warn('Error setting up script monitoring:', error);
+    }
   }
 
   private monitorScriptElement(script: HTMLScriptElement) {
-    const originalSrcSetter = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src')?.set;
+    try {
+      const originalSrcSetter = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src')?.set;
     
-    if (originalSrcSetter) {
-      Object.defineProperty(script, 'src', {
-        set: function(value) {
-          RealTimeMonitor.getInstance().analyzeScriptSource(value);
-          originalSrcSetter.call(this, value);
-        }
-      });
+      if (originalSrcSetter) {
+        Object.defineProperty(script, 'src', {
+          set: function(value) {
+            try {
+              RealTimeMonitor.getInstance().analyzeScriptSource(value);
+              originalSrcSetter.call(this, value);
+            } catch (error) {
+              console.warn('Error in script src setter:', error);
+              originalSrcSetter.call(this, value);
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('Error monitoring script element:', error);
     }
   }
 
   private analyzeScriptSource(src: string) {
-    const suspiciousDomains = ['malware.com', 'phishing.net', 'suspicious.org'];
+    try {
+      if (!src) return;
+      
+      const suspiciousDomains = ['malware.com', 'phishing.net', 'suspicious.org'];
     
-    if (suspiciousDomains.some(domain => src.includes(domain))) {
-      const threat: ThreatAlert = {
-        id: Math.random().toString(36).substr(2, 9),
-        timestamp: Date.now(),
-        severity: 'CRITICAL',
-        type: 'MALWARE',
-        sourceIP: 'external',
-        description: `Malicious script source detected: ${src}`,
-        confidence: 95,
-        blocked: true,
-        resolved: false
-      };
+      if (suspiciousDomains.some(domain => src.includes(domain))) {
+        const threat: ThreatAlert = {
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          severity: 'CRITICAL',
+          type: 'MALWARE',
+          sourceIP: 'external',
+          description: `Malicious script source detected: ${src}`,
+          confidence: 95,
+          blocked: true,
+          resolved: false
+        };
 
-      this.notifyListeners({ type: 'threat', data: threat });
+        this.notifyListeners({ type: 'threat', data: threat });
+      }
+    } catch (error) {
+      console.warn('Error analyzing script source:', error);
     }
   }
 
   private startSimulatedNetworkMonitoring() {
     // Fallback to simulated monitoring with realistic patterns
-    setInterval(() => {
-      if (!this.isMonitoring) return;
+    const simulationInterval = setInterval(() => {
+      try {
+        if (!this.isMonitoring) {
+          clearInterval(simulationInterval);
+          return;
+        }
 
-      const packet = this.generateRealisticPacket();
-      this.notifyListeners({ type: 'packet', data: packet });
-      this.analyzePacketForThreats(packet);
+        const packet = this.generateRealisticPacket();
+        this.notifyListeners({ type: 'packet', data: packet });
+        this.analyzePacketForThreats(packet);
+      } catch (error) {
+        console.warn('Error in simulated network monitoring:', error);
+      }
     }, 100 + Math.random() * 200);
   }
 
@@ -559,19 +710,25 @@ export class RealTimeMonitor {
   }
 
   private logActivity(activity: any) {
-    const log: SystemLog = {
-      id: Math.random().toString(36).substr(2, 9),
-      timestamp: Date.now(),
-      level: 'INFO',
-      source: 'HOST',
-      message: `User activity: ${activity.type}`,
-      details: activity
-    };
+    try {
+      const log: SystemLog = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        level: 'INFO',
+        source: 'HOST',
+        message: `User activity: ${activity?.type || 'unknown'}`,
+        details: activity
+      };
 
-    this.notifyListeners({ type: 'log', data: log });
+      this.notifyListeners({ type: 'log', data: log });
+    } catch (error) {
+      console.warn('Error logging activity:', error);
+    }
   }
 
   private handleNetworkChange(connection: any) {
+    if (!connection) return;
+    
     const log: SystemLog = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
@@ -579,9 +736,9 @@ export class RealTimeMonitor {
       source: 'NETWORK',
       message: `Network change detected: ${connection.effectiveType}`,
       details: {
-        effectiveType: connection.effectiveType,
-        downlink: connection.downlink,
-        rtt: connection.rtt
+        effectiveType: connection.effectiveType || 'unknown',
+        downlink: connection.downlink || 0,
+        rtt: connection.rtt || 0
       }
     };
 
@@ -589,13 +746,22 @@ export class RealTimeMonitor {
   }
 
   startMonitoring() {
-    this.isMonitoring = true;
-    console.log('Real-time monitoring started');
+    try {
+      this.isMonitoring = true;
+      console.log('Real-time monitoring started');
+    } catch (error) {
+      console.error('Error starting monitoring:', error);
+      this.isMonitoring = false;
+    }
   }
 
   stopMonitoring() {
-    this.isMonitoring = false;
-    console.log('Real-time monitoring stopped');
+    try {
+      this.isMonitoring = false;
+      console.log('Real-time monitoring stopped');
+    } catch (error) {
+      console.error('Error stopping monitoring:', error);
+    }
   }
 
   subscribe(callback: (data: any) => void) {

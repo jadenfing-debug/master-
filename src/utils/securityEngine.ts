@@ -60,29 +60,41 @@ export class SecurityEngine {
 
   private handleRealTimeData(data: any) {
     try {
+      if (!data || !data.type) return;
+      
       switch (data.type) {
         case 'packet':
-          this.packets.unshift(data.data);
-          this.packets = this.packets.slice(0, 1000);
-          this.notifyListeners({ type: 'packets', data: this.packets.slice(0, 50) });
+          if (data.data) {
+            this.packets.unshift(data.data);
+            this.packets = this.packets.slice(0, 1000);
+            this.notifyListeners({ type: 'packets', data: this.packets.slice(0, 50) });
+          }
           break;
         case 'threat':
-          this.alerts.unshift(data.data);
-          this.alerts = this.alerts.slice(0, 500);
-          this.notifyListeners({ type: 'threat', data: data.data });
+          if (data.data) {
+            this.alerts.unshift(data.data);
+            this.alerts = this.alerts.slice(0, 500);
+            this.notifyListeners({ type: 'threat', data: data.data });
+          }
           break;
         case 'metrics':
-          this.metrics.unshift(data.data);
-          this.metrics = this.metrics.slice(0, 100);
-          this.notifyListeners({ type: 'metrics', data: data.data });
+          if (data.data) {
+            this.metrics.unshift(data.data);
+            this.metrics = this.metrics.slice(0, 100);
+            this.notifyListeners({ type: 'metrics', data: data.data });
+          }
           break;
         case 'log':
-          this.logs.unshift(data.data);
-          this.logs = this.logs.slice(0, 1000);
-          this.notifyListeners({ type: 'log', data: data.data });
+          if (data.data) {
+            this.logs.unshift(data.data);
+            this.logs = this.logs.slice(0, 1000);
+            this.notifyListeners({ type: 'log', data: data.data });
+          }
           break;
         case 'error':
-          this.notifyListeners({ type: 'error', data: data.data });
+          if (data.data) {
+            this.notifyListeners({ type: 'error', data: data.data });
+          }
           break;
       }
     } catch (error) {
@@ -248,9 +260,15 @@ export class SecurityEngine {
   }
 
   resolveAlert(alertId: string) {
-    const alert = this.alerts.find(a => a.id === alertId);
-    if (alert) {
-      alert.resolved = true;
+    try {
+      if (!alertId) return;
+      
+      const alert = this.alerts.find(a => a.id === alertId);
+      if (alert) {
+        alert.resolved = true;
+      }
+    } catch (error) {
+      this.errorHandler?.(error as Error);
     }
   }
 
@@ -287,14 +305,18 @@ export class SecurityEngine {
 
   // Performance optimization
   cleanup() {
-    // Clean up old data to prevent memory leaks
-    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-    const cutoff = Date.now() - maxAge;
+    try {
+      // Clean up old data to prevent memory leaks
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      const cutoff = Date.now() - maxAge;
 
-    this.packets = this.packets.filter(p => p.timestamp > cutoff);
-    this.alerts = this.alerts.filter(a => a.timestamp > cutoff);
-    this.metrics = this.metrics.filter(m => m.timestamp > cutoff);
-    this.logs = this.logs.filter(l => l.timestamp > cutoff);
+      this.packets = this.packets.filter(p => p && p.timestamp > cutoff);
+      this.alerts = this.alerts.filter(a => a && a.timestamp > cutoff);
+      this.metrics = this.metrics.filter(m => m && m.timestamp > cutoff);
+      this.logs = this.logs.filter(l => l && l.timestamp > cutoff);
+    } catch (error) {
+      this.errorHandler?.(error as Error);
+    }
   }
 }
 

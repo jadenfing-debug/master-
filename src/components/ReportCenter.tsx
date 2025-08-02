@@ -58,20 +58,30 @@ const ReportCenter: React.FC<ReportCenterProps> = ({ threats, metrics, packets, 
   };
 
   const downloadReport = (report: SecurityReport, format: 'JSON' | 'CSV' | 'PDF' = 'JSON') => {
-    const content = reportGenerator.exportReport(report, format);
-    const blob = new Blob([content], { 
-      type: format === 'JSON' ? 'application/json' : 
-           format === 'CSV' ? 'text/csv' : 'text/plain' 
-    });
+    try {
+      if (!report) {
+        alert('No report selected');
+        return;
+      }
+      
+      const content = reportGenerator.exportReport(report, format);
+      const blob = new Blob([content], { 
+        type: format === 'JSON' ? 'application/json' : 
+             format === 'CSV' ? 'text/csv' : 'text/plain' 
+      });
     
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${report.title.replace(/\s+/g, '_')}.${format.toLowerCase()}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(report.title || 'report').replace(/\s+/g, '_')}.${format.toLowerCase()}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      alert('Failed to download report. Please try again.');
+    }
   };
 
   const getReportIcon = (type: string) => {
