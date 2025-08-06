@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Activity, AlertTriangle, Network, Cpu, HardDrive, Wifi, Lock } from 'lucide-react';
 import { clsx } from 'clsx';
 import { securityEngine } from '../utils/securityEngine';
+import { anomalyDetector } from '../utils/anomalyDetector';
 import { ThreatAlert, SystemMetrics, NetworkPacket } from '../types/security';
 import ThreatMonitor from './ThreatMonitor';
 import NetworkAnalyzer from './NetworkAnalyzer';
@@ -19,6 +20,7 @@ const Dashboard: React.FC = () => {
   const [systemLogs, setSystemLogs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'monitoring' | 'reports'>('monitoring');
   const [systemHealth, setSystemHealth] = useState<any>(null);
+  const [anomalyStats, setAnomalyStats] = useState<any>(null);
 
   useEffect(() => {
     const handleSecurityUpdate = (data: any) => {
@@ -40,6 +42,8 @@ const Dashboard: React.FC = () => {
           case 'packets':
             if (data.data) {
               setRecentPackets(data.data);
+              // Update anomaly statistics
+              setAnomalyStats(securityEngine.getAnomalyStatistics());
             }
             break;
           case 'log':
@@ -68,6 +72,7 @@ const Dashboard: React.FC = () => {
     // Health check interval
     const healthInterval = setInterval(() => {
       setSystemHealth(securityEngine.getSystemHealth());
+      setAnomalyStats(securityEngine.getAnomalyStatistics());
     }, 5000);
 
     // Cleanup interval
@@ -98,6 +103,7 @@ const Dashboard: React.FC = () => {
 
   const criticalThreats = activeThreats.filter(t => t.severity === 'CRITICAL').length;
   const highThreats = activeThreats.filter(t => t.severity === 'HIGH').length;
+  const anomalousPackets = recentPackets.filter(p => p.isAnomalous).length;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -123,7 +129,7 @@ const Dashboard: React.FC = () => {
               
               {systemHealth && (
                 <div className="text-xs text-gray-400">
-                  {systemHealth.packetsCount} packets | {systemHealth.threatsCount} threats
+                  {systemHealth.packetsCount} packets | {systemHealth.threatsCount} threats | {anomalousPackets} anomalous
                 </div>
               )}
               
@@ -198,7 +204,7 @@ const Dashboard: React.FC = () => {
               <Network className="h-8 w-8 text-blue-400" />
             </div>
             <div className="mt-2 text-xs text-gray-500">
-              {recentPackets.length} packets/sec
+              {recentPackets.length} packets/sec | {anomalousPackets} anomalous
             </div>
           </div>
 

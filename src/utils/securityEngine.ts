@@ -1,5 +1,6 @@
 import { NetworkPacket, ThreatAlert, SystemMetrics, MLModel } from '../types/security';
 import { realTimeMonitor } from './realTimeMonitor';
+import { anomalyDetector } from './anomalyDetector';
 
 export class SecurityEngine {
   private static instance: SecurityEngine;
@@ -65,9 +66,23 @@ export class SecurityEngine {
       switch (data.type) {
         case 'packet':
           if (data.data) {
+            // Analyze packet for anomalies
+            const anomalyAnalysis = anomalyDetector.analyzePacket(data.data);
+            data.data.anomalyScore = anomalyAnalysis.score;
+            data.data.anomalyReasons = anomalyAnalysis.factors.map(f => f.description);
+            data.data.isAnomalous = anomalyAnalysis.verdict !== 'NORMAL';
+            
             this.packets.unshift(data.data);
             this.packets = this.packets.slice(0, 1000);
             this.notifyListeners({ type: 'packets', data: this.packets.slice(0, 50) });
+            
+            // Generate threat alert if anomalous
+            if (anomalyAnalysis.verdict === 'ANOMALOUS' || anomalyAnalysis.verdict === 'MALICIOUS') {
+              const threat = this.createThreatFromAnomaly(data.data, anomalyAnalysis);
+              this.alerts.unshift(threat);
+              this.alerts = this.alerts.slice(0, 500);
+              this.notifyListeners({ type: 'threat', data: threat });
+            }
           }
           break;
         case 'threat':
@@ -82,6 +97,11 @@ export class SecurityEngine {
             this.metrics.unshift(data.data);
             this.metrics = this.metrics.slice(0, 100);
             this.notifyListeners({ type: 'metrics', data: data.data });
+            
+            // Update anomaly detector baseline periodically
+            if (this.packets.length > 0 && this.packets.length % 100 === 0) {
+              anomalyDetector.updateBaseline(this.packets.slice(0, 500));
+            }
           }
           break;
         case 'log':
@@ -102,6 +122,28 @@ export class SecurityEngine {
     }
   }
 
+  private createThreatFromAnomaly(packet: NetworkPacket, analysis: any): ThreatAlert {
+    const severityMap = {
+      'MALICIOUS': 'CRITICAL' as const,
+      'ANOMALOUS': 'HIGH' as const,
+      'SUSPICIOUS': 'MEDIUM' as const,
+      'NORMAL': 'LOW' as const
+    };
+
+    return {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: packet.timestamp,
+      severity: severityMap[analysis.verdict] || 'MEDIUM',
+      type: 'ANOMALY',
+      sourceIP: packet.sourceIP,
+      destIP: packet.destIP,
+      description: analysis.explanation,
+      confidence: analysis.score,
+      blocked: analysis.score > 70,
+      resolved: false,
+      anomalyAnalysis: analysis
+    };
+  }
   private initializeMLModels() {
     this.models = [
       {
@@ -317,6 +359,16 @@ export class SecurityEngine {
     } catch (error) {
       this.errorHandler?.(error as Error);
     }
+  }
+
+  // Get anomaly detector statistics
+  getAnomalyStatistics() {
+    return anomalyDetector.getStatistics();
+  }
+
+  // Get current baseline metrics
+  getBaselineMetrics() {
+    return anomalyDetector.getBaseline();
   }
 }
 

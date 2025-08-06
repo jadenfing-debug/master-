@@ -9,6 +9,9 @@ export interface NetworkPacket {
   size: number;
   flags: string[];
   payload?: string;
+  anomalyScore?: number;
+  anomalyReasons?: string[];
+  isAnomalous?: boolean;
 }
 
 export interface ThreatAlert {
@@ -22,6 +25,31 @@ export interface ThreatAlert {
   confidence: number;
   blocked: boolean;
   resolved: boolean;
+  anomalyAnalysis?: AnomalyAnalysis;
+}
+
+export interface AnomalyAnalysis {
+  score: number;
+  factors: AnomalyFactor[];
+  baseline: BaselineMetrics;
+  verdict: 'NORMAL' | 'SUSPICIOUS' | 'ANOMALOUS' | 'MALICIOUS';
+  explanation: string;
+}
+
+export interface AnomalyFactor {
+  type: 'FREQUENCY' | 'SIZE' | 'TIMING' | 'PROTOCOL' | 'GEOLOCATION' | 'BEHAVIOR' | 'SIGNATURE';
+  description: string;
+  score: number;
+  weight: number;
+  evidence: string;
+}
+
+export interface BaselineMetrics {
+  avgPacketSize: number;
+  commonPorts: number[];
+  typicalProtocols: string[];
+  normalFrequency: number;
+  establishedConnections: string[];
 }
 
 export interface SystemMetrics {
