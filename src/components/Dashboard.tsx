@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Activity, AlertTriangle, Network, Cpu, HardDrive, Wifi, Lock } from 'lucide-react';
+import { Shield, Activity, AlertTriangle, Network, Cpu, HardDrive, Wifi, Lock, Settings } from 'lucide-react';
 import { clsx } from 'clsx';
 import { securityEngine } from '../utils/securityEngine';
 import { anomalyDetector } from '../utils/anomalyDetector';
@@ -10,6 +10,7 @@ import SystemStatus from './SystemStatus';
 import MLModelStatus from './MLModelStatus';
 import AlertCenter from './AlertCenter';
 import ReportCenter from './ReportCenter';
+import PermissionManager from './PermissionManager';
 
 const Dashboard: React.FC = () => {
   const [isScanning, setIsScanning] = useState(false);
@@ -21,6 +22,9 @@ const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'monitoring' | 'reports'>('monitoring');
   const [systemHealth, setSystemHealth] = useState<any>(null);
   const [anomalyStats, setAnomalyStats] = useState<any>(null);
+  const [showPermissions, setShowPermissions] = useState(false);
+  const [permissionsGranted, setPermissionsGranted] = useState<Record<string, boolean>>({});
+  const [hasRequestedPermissions, setHasRequestedPermissions] = useState(false);
 
   useEffect(() => {
     const handleSecurityUpdate = (data: any) => {
@@ -88,8 +92,19 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const toggleScanning = () => {
+    if (!hasRequestedPermissions) {
+      setShowPermissions(true);
+      return;
+    }
+    
     try {
       if (isScanning) {
+        securityEngine.stopScanning();
+        setIsScanning(false);
+      } else {
+        securityEngine.startScanning();
+        setIsScanning(true);
+      }
         securityEngine.stopScanning();
       } else {
         securityEngine.startScanning();
@@ -98,6 +113,21 @@ const Dashboard: React.FC = () => {
     } catch (error) {
       console.error('Error toggling scanning:', error);
       alert('Failed to toggle monitoring. Please try again.');
+    }
+  };
+
+  const handlePermissionsGranted = (permissions: Record<string, boolean>) => {
+    setPermissionsGranted(permissions);
+    setHasRequestedPermissions(true);
+    setShowPermissions(false);
+    
+    // Start monitoring if required permissions are granted
+    const requiredPermissions = ['performance', 'connection'];
+    const hasRequiredPermissions = requiredPermissions.every(perm => permissions[perm]);
+    
+    if (hasRequiredPermissions) {
+      securityEngine.startScanning();
+      setIsScanning(true);
     }
   };
 
@@ -127,6 +157,14 @@ const Dashboard: React.FC = () => {
                 </span>
               </div>
               
+              <button
+                onClick={() => setShowPermissions(true)}
+                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                title="Manage Permissions"
+              >
+                <Settings className="h-5 w-5 text-gray-400" />
+              </button>
+              
               {systemHealth && (
                 <div className="text-xs text-gray-400">
                   {systemHealth.packetsCount} packets | {systemHealth.threatsCount} threats | {anomalousPackets} anomalous
@@ -141,7 +179,7 @@ const Dashboard: React.FC = () => {
                     : 'bg-green-600 hover:bg-green-700 text-white'
                 }`}
               >
-                {isScanning ? 'Stop Monitoring' : 'Start Monitoring'}
+                {isScanning ? 'Stop Monitoring' : hasRequestedPermissions ? 'Start Monitoring' : 'Request Permissions'}
               </button>
             </div>
           </div>
@@ -266,6 +304,12 @@ const Dashboard: React.FC = () => {
           />
         )}
       </main>
+      
+      <PermissionManager
+        isVisible={showPermissions}
+        onClose={() => setShowPermissions(false)}
+        onPermissionsGranted={handlePermissionsGranted}
+      />
     </div>
   );
 };
