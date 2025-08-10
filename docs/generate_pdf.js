@@ -1,6 +1,6 @@
 // PDF Generation Script for CyberShield IDS Documentation
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 // Simple PDF-like text formatting
 function generatePDF() {
