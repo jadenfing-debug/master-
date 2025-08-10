@@ -121,6 +121,9 @@ const Dashboard: React.FC = () => {
     setHasRequestedPermissions(true);
     setShowPermissions(false);
     
+    // Set permissions in security engine
+    securityEngine.setSystemPermissions(permissions);
+    
     // Start monitoring if required permissions are granted
     const requiredPermissions = ['performance', 'connection'];
     const hasRequiredPermissions = requiredPermissions.every(perm => permissions[perm]);

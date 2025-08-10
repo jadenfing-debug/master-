@@ -1,5 +1,6 @@
 import { NetworkPacket, ThreatAlert, SystemMetrics, MLModel } from '../types/security';
 import { realTimeMonitor } from './realTimeMonitor';
+import { realTimeSystemMonitor } from './realTimeSystemMonitor';
 import { anomalyDetector } from './anomalyDetector';
 
 export class SecurityEngine {
@@ -17,6 +18,7 @@ export class SecurityEngine {
     this.initializeMLModels();
     this.setupErrorHandling();
     this.integrateRealTimeMonitor();
+    this.integrateSystemMonitor();
   }
 
   static getInstance(): SecurityEngine {
@@ -52,6 +54,16 @@ export class SecurityEngine {
   private integrateRealTimeMonitor() {
     try {
       realTimeMonitor.subscribe((data) => {
+        this.handleRealTimeData(data);
+      });
+    } catch (error) {
+      this.errorHandler?.(error as Error);
+    }
+  }
+
+  private integrateSystemMonitor() {
+    try {
+      realTimeSystemMonitor.subscribe((data) => {
         this.handleRealTimeData(data);
       });
     } catch (error) {
@@ -109,6 +121,16 @@ export class SecurityEngine {
             this.logs.unshift(data.data);
             this.logs = this.logs.slice(0, 1000);
             this.notifyListeners({ type: 'log', data: data.data });
+          }
+          break;
+        case 'network_change':
+          if (data.data) {
+            this.notifyListeners({ type: 'network_change', data: data.data });
+          }
+          break;
+        case 'storage':
+          if (data.data) {
+            this.notifyListeners({ type: 'storage', data: data.data });
           }
           break;
         case 'error':
@@ -251,6 +273,7 @@ export class SecurityEngine {
     try {
       this.isScanning = true;
       realTimeMonitor.startMonitoring();
+      realTimeSystemMonitor.startMonitoring();
       this.notifyListeners({ 
         type: 'status', 
         data: { scanning: true, message: 'Real-time monitoring started' } 
@@ -264,6 +287,7 @@ export class SecurityEngine {
     try {
       this.isScanning = false;
       realTimeMonitor.stopMonitoring();
+      realTimeSystemMonitor.stopMonitoring();
       this.notifyListeners({ 
         type: 'status', 
         data: { scanning: false, message: 'Real-time monitoring stopped' } 
@@ -271,6 +295,10 @@ export class SecurityEngine {
     } catch (error) {
       this.errorHandler?.(error as Error);
     }
+  }
+
+  setSystemPermissions(permissions: Record<string, boolean>) {
+    realTimeSystemMonitor.setPermissions(permissions);
   }
 
   getRecentPackets(limit = 100): NetworkPacket[] {
