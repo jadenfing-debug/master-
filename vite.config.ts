@@ -8,4 +8,19 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['chart.js', 'react-chartjs-2'],
+          utils: ['date-fns', 'clsx']
+        }
+      }
+    }
+  },
+  server: {
+    host: true, // Allow external connections for mobile testing
+    port: 5173
+  }
 });
