@@ -306,6 +306,7 @@ export class RealTimeSystemMonitor {
             quota: estimate.quota,
             usage: estimate.usage,
             usagePercentage: estimate.quota ? (estimate.usage! / estimate.quota) * 100 : 0,
+            )
             timestamp: Date.now()
           }
         });
